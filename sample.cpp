@@ -36,25 +36,12 @@ CURLcode curl_fetch_url(CURL *ch, const char *url, struct curl_fetch_st *fetch)
     return curl_easy_perform(ch);
 }
 
-json curl_post_json(const char *url, json &request)
+json curl_post_json(CURL *ch, const char *url, json &request)
 {
     json response = {
         {"code", 0},
         {"data", NULL}};
-    CURL *ch = curl_easy_init();
-    if (ch == NULL)
-    {
-        response["code"] = -1;
-        response["info"] = "初始化 cURL 失败";
-        return response;
-    }
-
-    struct curl_slist *headers = NULL;
-    headers = curl_slist_append(headers, "Accept: application/json");
-    headers = curl_slist_append(headers, "Content-Type: application/json");
-
     curl_easy_setopt(ch, CURLOPT_CUSTOMREQUEST, "POST");
-    curl_easy_setopt(ch, CURLOPT_HTTPHEADER, headers);
 
     auto body = request.dump();
     curl_easy_setopt(ch, CURLOPT_POSTFIELDS, body.c_str());
@@ -62,9 +49,6 @@ json curl_post_json(const char *url, json &request)
     struct curl_fetch_st curl_fetch;
     struct curl_fetch_st *cf = &curl_fetch;
     CURLcode rcode = curl_fetch_url(ch, url, cf);
-
-    curl_easy_cleanup(ch);
-    curl_slist_free_all(headers);
 
     if (rcode != CURLE_OK)
     {
@@ -80,9 +64,16 @@ int main(int argc, char *argv[])
 {
     const char *url = "http://192.168.3.218/public/robot/action";
 
-    json robot_data = {
-        {"cmd", "robot_data"}};
-    std::cout << curl_post_json(url, robot_data) << std::endl;
+    CURL *ch = curl_easy_init();
+    if (ch == NULL)
+    {
+        return 1;
+    }
+
+    struct curl_slist *headers = NULL;
+    headers = curl_slist_append(headers, "Accept: application/json");
+    headers = curl_slist_append(headers, "Content-Type: application/json");
+    curl_easy_setopt(ch, CURLOPT_HTTPHEADER, headers);
 
     json movej = {
         {"cmd", "movej"},
@@ -94,7 +85,15 @@ int main(int argc, char *argv[])
                      {"time", 2},
                      {"smooth_move_to_next", 1},
                  }}};
-    std::cout << curl_post_json(url, movej) << std::endl;
+    curl_post_json(ch, url, movej);
+
+    json robot_data = {
+        {"cmd", "robot_data"}};
+    auto res = curl_post_json(ch, url, robot_data);
+    std::cout << res["data"]["actual_joint"] << std::endl;
+
+    curl_easy_cleanup(ch);
+    curl_slist_free_all(headers);
 
     return 0;
 }
